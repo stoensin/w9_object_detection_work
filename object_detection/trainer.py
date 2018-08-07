@@ -163,8 +163,8 @@ def _create_losses(input_queue, create_model_fn, train_config):
                                       groundtruth_masks_list,
                                       groundtruth_keypoints_list)
   prediction_dict = detection_model.predict(images)
-
   losses_dict = detection_model.loss(prediction_dict)
+
   for loss_tensor in losses_dict.values():
     tf.losses.add_loss(loss_tensor)
 
@@ -221,7 +221,7 @@ def train(create_tensor_dict_fn, create_model_fn, train_config, master, task,
     # collections so that they don't have to be passed around.
     summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
     global_summaries = set([])
-
+ 
     model_fn = functools.partial(_create_losses,
                                  create_model_fn=create_model_fn,
                                  train_config=train_config)

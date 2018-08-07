@@ -459,6 +459,7 @@ class SSDMetaArch(model.DetectionModel):
             self.groundtruth_lists(fields.BoxListFields.boxes), match_list)
       num_matches = tf.stack(
           [match.num_matched_columns() for match in match_list])
+
       location_losses = self._localization_loss(
           prediction_dict['box_encodings'],
           batch_reg_targets,

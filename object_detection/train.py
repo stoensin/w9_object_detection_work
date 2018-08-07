@@ -45,11 +45,20 @@ import functools
 import json
 import os
 import tensorflow as tf
+import sys
+'''
+print(os.getcwd())
+path = os.path.join(os.getcwd(), 'slim')
+sys.path.append(os.getcwd())
+sys.path.append(path)
+'''
 
 from object_detection import trainer
 from object_detection.builders import input_reader_builder
 from object_detection.builders import model_builder
 from object_detection.utils import config_util
+
+
 
 tf.logging.set_verbosity(tf.logging.INFO)
 

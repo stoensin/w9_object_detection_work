@@ -15,12 +15,7 @@
 
 """Function to build box predictor from configuration."""
 
-from object_detection.predictors import convolutional_box_predictor
-from object_detection.predictors import mask_rcnn_box_predictor
-from object_detection.predictors import rfcn_box_predictor
-from object_detection.predictors.mask_rcnn_heads import box_head
-from object_detection.predictors.mask_rcnn_heads import class_head
-from object_detection.predictors.mask_rcnn_heads import mask_head
+from object_detection.core import box_predictor
 from object_detection.protos import box_predictor_pb2
 
 
@@ -53,112 +48,61 @@ def build(argscope_fn, box_predictor_config, is_training, num_classes):
   box_predictor_oneof = box_predictor_config.WhichOneof('box_predictor_oneof')
 
   if  box_predictor_oneof == 'convolutional_box_predictor':
-    config_box_predictor = box_predictor_config.convolutional_box_predictor
-    conv_hyperparams_fn = argscope_fn(config_box_predictor.conv_hyperparams,
-                                      is_training)
-    box_predictor_object = (
-        convolutional_box_predictor.ConvolutionalBoxPredictor(
-            is_training=is_training,
-            num_classes=num_classes,
-            conv_hyperparams_fn=conv_hyperparams_fn,
-            min_depth=config_box_predictor.min_depth,
-            max_depth=config_box_predictor.max_depth,
-            num_layers_before_predictor=(
-                config_box_predictor.num_layers_before_predictor),
-            use_dropout=config_box_predictor.use_dropout,
-            dropout_keep_prob=config_box_predictor.dropout_keep_probability,
-            kernel_size=config_box_predictor.kernel_size,
-            box_code_size=config_box_predictor.box_code_size,
-            apply_sigmoid_to_scores=config_box_predictor.
-            apply_sigmoid_to_scores,
-            class_prediction_bias_init=(
-                config_box_predictor.class_prediction_bias_init),
-            use_depthwise=config_box_predictor.use_depthwise))
-    return box_predictor_object
-
-  if  box_predictor_oneof == 'weight_shared_convolutional_box_predictor':
-    config_box_predictor = (
-        box_predictor_config.weight_shared_convolutional_box_predictor)
-    conv_hyperparams_fn = argscope_fn(config_box_predictor.conv_hyperparams,
-                                      is_training)
-    apply_batch_norm = config_box_predictor.conv_hyperparams.HasField(
-        'batch_norm')
-    box_predictor_object = (
-        convolutional_box_predictor.WeightSharedConvolutionalBoxPredictor(
-            is_training=is_training,
-            num_classes=num_classes,
-            conv_hyperparams_fn=conv_hyperparams_fn,
-            depth=config_box_predictor.depth,
-            num_layers_before_predictor=(
-                config_box_predictor.num_layers_before_predictor),
-            kernel_size=config_box_predictor.kernel_size,
-            box_code_size=config_box_predictor.box_code_size,
-            class_prediction_bias_init=config_box_predictor.
-            class_prediction_bias_init,
-            use_dropout=config_box_predictor.use_dropout,
-            dropout_keep_prob=config_box_predictor.dropout_keep_probability,
-            share_prediction_tower=config_box_predictor.share_prediction_tower,
-            apply_batch_norm=apply_batch_norm))
+    conv_box_predictor = box_predictor_config.convolutional_box_predictor
+    conv_hyperparams = argscope_fn(conv_box_predictor.conv_hyperparams,
+                                   is_training)
+    box_predictor_object = box_predictor.ConvolutionalBoxPredictor(
+        is_training=is_training,
+        num_classes=num_classes,
+        conv_hyperparams=conv_hyperparams,
+        min_depth=conv_box_predictor.min_depth,
+        max_depth=conv_box_predictor.max_depth,
+        num_layers_before_predictor=(conv_box_predictor.
+                                     num_layers_before_predictor),
+        use_dropout=conv_box_predictor.use_dropout,
+        dropout_keep_prob=conv_box_predictor.dropout_keep_probability,
+        kernel_size=conv_box_predictor.kernel_size,
+        box_code_size=conv_box_predictor.box_code_size,
+        apply_sigmoid_to_scores=conv_box_predictor.apply_sigmoid_to_scores,
+        class_prediction_bias_init=conv_box_predictor.class_prediction_bias_init
+    )
     return box_predictor_object
 
   if box_predictor_oneof == 'mask_rcnn_box_predictor':
-    config_box_predictor = box_predictor_config.mask_rcnn_box_predictor
-    fc_hyperparams_fn = argscope_fn(config_box_predictor.fc_hyperparams,
-                                    is_training)
-    conv_hyperparams_fn = None
-    if config_box_predictor.HasField('conv_hyperparams'):
-      conv_hyperparams_fn = argscope_fn(
-          config_box_predictor.conv_hyperparams, is_training)
-    box_prediction_head = box_head.BoxHead(
+    mask_rcnn_box_predictor = box_predictor_config.mask_rcnn_box_predictor
+    fc_hyperparams = argscope_fn(mask_rcnn_box_predictor.fc_hyperparams,
+                                 is_training)
+    conv_hyperparams = None
+    if mask_rcnn_box_predictor.HasField('conv_hyperparams'):
+      conv_hyperparams = argscope_fn(mask_rcnn_box_predictor.conv_hyperparams,
+                                     is_training)
+    box_predictor_object = box_predictor.MaskRCNNBoxPredictor(
         is_training=is_training,
         num_classes=num_classes,
-        fc_hyperparams_fn=fc_hyperparams_fn,
-        use_dropout=config_box_predictor.use_dropout,
-        dropout_keep_prob=config_box_predictor.dropout_keep_probability,
-        box_code_size=config_box_predictor.box_code_size,
-        share_box_across_classes=(
-            config_box_predictor.share_box_across_classes))
-    class_prediction_head = class_head.ClassHead(
-        is_training=is_training,
-        num_classes=num_classes,
-        fc_hyperparams_fn=fc_hyperparams_fn,
-        use_dropout=config_box_predictor.use_dropout,
-        dropout_keep_prob=config_box_predictor.dropout_keep_probability)
-    third_stage_heads = {}
-    if config_box_predictor.predict_instance_masks:
-      third_stage_heads[
-          mask_rcnn_box_predictor.MASK_PREDICTIONS] = mask_head.MaskHead(
-              num_classes=num_classes,
-              conv_hyperparams_fn=conv_hyperparams_fn,
-              mask_height=config_box_predictor.mask_height,
-              mask_width=config_box_predictor.mask_width,
-              mask_prediction_num_conv_layers=(
-                  config_box_predictor.mask_prediction_num_conv_layers),
-              mask_prediction_conv_depth=(
-                  config_box_predictor.mask_prediction_conv_depth),
-              masks_are_class_agnostic=(
-                  config_box_predictor.masks_are_class_agnostic))
-    box_predictor_object = mask_rcnn_box_predictor.MaskRCNNBoxPredictor(
-        is_training=is_training,
-        num_classes=num_classes,
-        box_prediction_head=box_prediction_head,
-        class_prediction_head=class_prediction_head,
-        third_stage_heads=third_stage_heads)
+        fc_hyperparams=fc_hyperparams,
+        use_dropout=mask_rcnn_box_predictor.use_dropout,
+        dropout_keep_prob=mask_rcnn_box_predictor.dropout_keep_probability,
+        box_code_size=mask_rcnn_box_predictor.box_code_size,
+        conv_hyperparams=conv_hyperparams,
+        predict_instance_masks=mask_rcnn_box_predictor.predict_instance_masks,
+        mask_prediction_conv_depth=(mask_rcnn_box_predictor.
+                                    mask_prediction_conv_depth),
+        predict_keypoints=mask_rcnn_box_predictor.predict_keypoints)
     return box_predictor_object
 
   if box_predictor_oneof == 'rfcn_box_predictor':
-    config_box_predictor = box_predictor_config.rfcn_box_predictor
-    conv_hyperparams_fn = argscope_fn(config_box_predictor.conv_hyperparams,
-                                      is_training)
-    box_predictor_object = rfcn_box_predictor.RfcnBoxPredictor(
+    rfcn_box_predictor = box_predictor_config.rfcn_box_predictor
+    conv_hyperparams = argscope_fn(rfcn_box_predictor.conv_hyperparams,
+                                   is_training)
+    box_predictor_object = box_predictor.RfcnBoxPredictor(
         is_training=is_training,
         num_classes=num_classes,
-        conv_hyperparams_fn=conv_hyperparams_fn,
-        crop_size=[config_box_predictor.crop_height,
-                   config_box_predictor.crop_width],
-        num_spatial_bins=[config_box_predictor.num_spatial_bins_height,
-                          config_box_predictor.num_spatial_bins_width],
-        depth=config_box_predictor.depth,
-        box_code_size=config_box_predictor.box_code_size)
+        conv_hyperparams=conv_hyperparams,
+        crop_size=[rfcn_box_predictor.crop_height,
+                   rfcn_box_predictor.crop_width],
+        num_spatial_bins=[rfcn_box_predictor.num_spatial_bins_height,
+                          rfcn_box_predictor.num_spatial_bins_width],
+        depth=rfcn_box_predictor.depth,
+        box_code_size=rfcn_box_predictor.box_code_size)
     return box_predictor_object
   raise ValueError('Unknown box predictor: {}'.format(box_predictor_oneof))

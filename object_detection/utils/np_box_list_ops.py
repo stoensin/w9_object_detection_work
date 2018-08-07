@@ -19,7 +19,9 @@ Example box operations that are supported:
   * Areas: compute bounding box areas
   * IOU: pairwise intersection-over-union scores
 """
+
 import numpy as np
+from six.moves import xrange
 
 from object_detection.utils import np_box_list
 from object_detection.utils import np_box_ops
@@ -95,7 +97,7 @@ def ioa(boxlist1, boxlist2):
 def gather(boxlist, indices, fields=None):
   """Gather boxes from BoxList according to indices and return new BoxList.
 
-  By default, gather returns boxes corresponding to the input index list, as
+  By default, Gather returns boxes corresponding to the input index list, as
   well as all additional fields stored in the boxlist (indexing into the
   first dimension).  However one can optionally only gather from a
   subset of fields.
@@ -213,7 +215,7 @@ def non_max_suppression(boxlist,
   is_index_valid = np.full(num_boxes, 1, dtype=bool)
   selected_indices = []
   num_output = 0
-  for i in range(num_boxes):
+  for i in xrange(num_boxes):
     if num_output < max_output_size:
       if is_index_valid[i]:
         num_output += 1

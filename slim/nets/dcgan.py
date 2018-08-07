@@ -19,9 +19,8 @@ from __future__ import print_function
 
 from math import log
 
-from six.moves import xrange  # pylint: disable=redefined-builtin
+from six.moves import xrange
 import tensorflow as tf
-
 slim = tf.contrib.slim
 
 

@@ -23,7 +23,6 @@ Localization losses:
 Classification losses:
  * WeightedSigmoidClassificationLoss
  * WeightedSoftmaxClassificationLoss
- * WeightedSoftmaxClassificationAgainstLogitsLoss
  * BootstrappedSigmoidClassificationLoss
 """
 from abc import ABCMeta
@@ -51,10 +50,8 @@ class Loss(object):
     """Call the loss function.
 
     Args:
-      prediction_tensor: an N-d tensor of shape [batch, anchors, ...]
-        representing predicted quantities.
-      target_tensor: an N-d tensor of shape [batch, anchors, ...] representing
-        regression or classification targets.
+      prediction_tensor: a tensor representing predicted quantities.
+      target_tensor: a tensor representing regression or classification targets.
       ignore_nan_targets: whether to ignore nan targets in the loss computation.
         E.g. can be used if the target tensor is missing groundtruth data that
         shouldn't be factored into the loss.
@@ -84,8 +81,7 @@ class Loss(object):
               the Loss.
 
     Returns:
-      loss: an N-d tensor of shape [batch, anchors, ...] containing the loss per
-        anchor
+      loss: a tensor representing the value of the loss function
     """
     pass
 
@@ -96,6 +92,15 @@ class WeightedL2LocalizationLoss(Loss):
   Loss[b,a] = .5 * ||weights[b,a] * (prediction[b,a,:] - target[b,a,:])||^2
   """
 
+  def __init__(self, anchorwise_output=False):
+    """Constructor.
+
+    Args:
+      anchorwise_output: Outputs loss per anchor. (default False)
+
+    """
+    self._anchorwise_output = anchorwise_output
+
   def _compute_loss(self, prediction_tensor, target_tensor, weights):
     """Compute loss function.
 
@@ -107,32 +112,34 @@ class WeightedL2LocalizationLoss(Loss):
       weights: a float tensor of shape [batch_size, num_anchors]
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors] tensor
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
+            or a float tensor of shape [batch_size, num_anchors]
     """
     weighted_diff = (prediction_tensor - target_tensor) * tf.expand_dims(
         weights, 2)
     square_diff = 0.5 * tf.square(weighted_diff)
-    return tf.reduce_sum(square_diff, 2)
+    if self._anchorwise_output:
+      return tf.reduce_sum(square_diff, 2)
+    return tf.reduce_sum(square_diff)
 
 
 class WeightedSmoothL1LocalizationLoss(Loss):
-  """Smooth L1 localization loss function aka Huber Loss..
+  """Smooth L1 localization loss function.
 
-  The smooth L1_loss is defined elementwise as .5 x^2 if |x| <= delta and
-  delta * (|x|- 0.5*delta) otherwise, where x is the difference between
-  predictions and target.
+  The smooth L1_loss is defined elementwise as .5 x^2 if |x|<1 and |x|-.5
+  otherwise, where x is the difference between predictions and target.
 
   See also Equation (3) in the Fast R-CNN paper by Ross Girshick (ICCV 2015)
   """
 
-  def __init__(self, delta=1.0):
+  def __init__(self, anchorwise_output=False):
     """Constructor.
 
     Args:
-      delta: delta for smooth L1 loss.
+      anchorwise_output: Outputs loss per anchor. (default False)
+
     """
-    self._delta = delta
+    self._anchorwise_output = anchorwise_output
 
   def _compute_loss(self, prediction_tensor, target_tensor, weights):
     """Compute loss function.
@@ -145,17 +152,17 @@ class WeightedSmoothL1LocalizationLoss(Loss):
       weights: a float tensor of shape [batch_size, num_anchors]
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors] tensor
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
     """
-    return tf.reduce_sum(tf.losses.huber_loss(
-        target_tensor,
-        prediction_tensor,
-        delta=self._delta,
-        weights=tf.expand_dims(weights, axis=2),
-        loss_collection=None,
-        reduction=tf.losses.Reduction.NONE
-    ), axis=2)
+    diff = prediction_tensor - target_tensor
+    abs_diff = tf.abs(diff)
+    abs_diff_lt_1 = tf.less(abs_diff, 1)
+    anchorwise_smooth_l1norm = tf.reduce_sum(
+        tf.where(abs_diff_lt_1, 0.5 * tf.square(abs_diff), abs_diff - 0.5),
+        2) * weights
+    if self._anchorwise_output:
+      return anchorwise_smooth_l1norm
+    return tf.reduce_sum(anchorwise_smooth_l1norm)
 
 
 class WeightedIOULocalizationLoss(Loss):
@@ -177,18 +184,26 @@ class WeightedIOULocalizationLoss(Loss):
       weights: a float tensor of shape [batch_size, num_anchors]
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors] tensor
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
     """
     predicted_boxes = box_list.BoxList(tf.reshape(prediction_tensor, [-1, 4]))
     target_boxes = box_list.BoxList(tf.reshape(target_tensor, [-1, 4]))
     per_anchor_iou_loss = 1.0 - box_list_ops.matched_iou(predicted_boxes,
                                                          target_boxes)
-    return tf.reshape(weights, [-1]) * per_anchor_iou_loss
+    return tf.reduce_sum(tf.reshape(weights, [-1]) * per_anchor_iou_loss)
 
 
 class WeightedSigmoidClassificationLoss(Loss):
   """Sigmoid cross entropy classification loss function."""
+
+  def __init__(self, anchorwise_output=False):
+    """Constructor.
+
+    Args:
+      anchorwise_output: Outputs loss per anchor. (default False)
+
+    """
+    self._anchorwise_output = anchorwise_output
 
   def _compute_loss(self,
                     prediction_tensor,
@@ -207,8 +222,8 @@ class WeightedSigmoidClassificationLoss(Loss):
         If provided, computes loss only for the specified class indices.
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors, num_classes]
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
+            or a float tensor of shape [batch_size, num_anchors]
     """
     weights = tf.expand_dims(weights, 2)
     if class_indices is not None:
@@ -218,7 +233,9 @@ class WeightedSigmoidClassificationLoss(Loss):
           [1, 1, -1])
     per_entry_cross_ent = (tf.nn.sigmoid_cross_entropy_with_logits(
         labels=target_tensor, logits=prediction_tensor))
-    return per_entry_cross_ent * weights
+    if self._anchorwise_output:
+      return tf.reduce_sum(per_entry_cross_ent * weights, 2)
+    return tf.reduce_sum(per_entry_cross_ent * weights)
 
 
 class SigmoidFocalClassificationLoss(Loss):
@@ -228,13 +245,15 @@ class SigmoidFocalClassificationLoss(Loss):
   examples. See https://arxiv.org/pdf/1708.02002.pdf for the loss definition.
   """
 
-  def __init__(self, gamma=2.0, alpha=0.25):
+  def __init__(self, anchorwise_output=False, gamma=2.0, alpha=0.25):
     """Constructor.
 
     Args:
+      anchorwise_output: Outputs loss per anchor. (default False)
       gamma: exponent of the modulating factor (1 - p_t) ^ gamma.
       alpha: optional alpha weighting factor to balance positives vs negatives.
     """
+    self._anchorwise_output = anchorwise_output
     self._alpha = alpha
     self._gamma = gamma
 
@@ -255,8 +274,8 @@ class SigmoidFocalClassificationLoss(Loss):
         If provided, computes loss only for the specified class indices.
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors, num_classes]
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
+            or a float tensor of shape [batch_size, num_anchors]
     """
     weights = tf.expand_dims(weights, 2)
     if class_indices is not None:
@@ -278,21 +297,25 @@ class SigmoidFocalClassificationLoss(Loss):
                              (1 - target_tensor) * (1 - self._alpha))
     focal_cross_entropy_loss = (modulating_factor * alpha_weight_factor *
                                 per_entry_cross_ent)
-    return focal_cross_entropy_loss * weights
+    if self._anchorwise_output:
+      return tf.reduce_sum(focal_cross_entropy_loss * weights, 2)
+    return tf.reduce_sum(focal_cross_entropy_loss * weights)
 
 
 class WeightedSoftmaxClassificationLoss(Loss):
   """Softmax loss function."""
 
-  def __init__(self, logit_scale=1.0):
+  def __init__(self, anchorwise_output=False, logit_scale=1.0):
     """Constructor.
 
     Args:
+      anchorwise_output: Whether to output loss per anchor (default False)
       logit_scale: When this value is high, the prediction is "diffused" and
                    when this value is low, the prediction is made peakier.
                    (default 1.0)
 
     """
+    self._anchorwise_output = anchorwise_output
     self._logit_scale = logit_scale
 
   def _compute_loss(self, prediction_tensor, target_tensor, weights):
@@ -306,8 +329,7 @@ class WeightedSoftmaxClassificationLoss(Loss):
       weights: a float tensor of shape [batch_size, num_anchors]
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors]
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
     """
     num_classes = prediction_tensor.get_shape().as_list()[-1]
     prediction_tensor = tf.divide(
@@ -315,55 +337,9 @@ class WeightedSoftmaxClassificationLoss(Loss):
     per_row_cross_ent = (tf.nn.softmax_cross_entropy_with_logits(
         labels=tf.reshape(target_tensor, [-1, num_classes]),
         logits=tf.reshape(prediction_tensor, [-1, num_classes])))
-    return tf.reshape(per_row_cross_ent, tf.shape(weights)) * weights
-
-
-class WeightedSoftmaxClassificationAgainstLogitsLoss(Loss):
-  """Softmax loss function against logits.
-
-   Targets are expected to be provided in logits space instead of "one hot" or
-   "probability distribution" space.
-  """
-
-  def __init__(self, logit_scale=1.0):
-    """Constructor.
-
-    Args:
-      logit_scale: When this value is high, the target is "diffused" and
-                   when this value is low, the target is made peakier.
-                   (default 1.0)
-
-    """
-    self._logit_scale = logit_scale
-
-  def _scale_and_softmax_logits(self, logits):
-    """Scale logits then apply softmax."""
-    scaled_logits = tf.divide(logits, self._logit_scale, name='scale_logits')
-    return tf.nn.softmax(scaled_logits, name='convert_scores')
-
-  def _compute_loss(self, prediction_tensor, target_tensor, weights):
-    """Compute loss function.
-
-    Args:
-      prediction_tensor: A float tensor of shape [batch_size, num_anchors,
-        num_classes] representing the predicted logits for each class
-      target_tensor: A float tensor of shape [batch_size, num_anchors,
-        num_classes] representing logit classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
-
-    Returns:
-      loss: a float tensor of shape [batch_size, num_anchors]
-        representing the value of the loss function.
-    """
-    num_classes = prediction_tensor.get_shape().as_list()[-1]
-    target_tensor = self._scale_and_softmax_logits(target_tensor)
-    prediction_tensor = tf.divide(prediction_tensor, self._logit_scale,
-                                  name='scale_logits')
-
-    per_row_cross_ent = (tf.nn.softmax_cross_entropy_with_logits(
-        labels=tf.reshape(target_tensor, [-1, num_classes]),
-        logits=tf.reshape(prediction_tensor, [-1, num_classes])))
-    return tf.reshape(per_row_cross_ent, tf.shape(weights)) * weights
+    if self._anchorwise_output:
+      return tf.reshape(per_row_cross_ent, tf.shape(weights)) * weights
+    return tf.reduce_sum(per_row_cross_ent * tf.reshape(weights, [-1]))
 
 
 class BootstrappedSigmoidClassificationLoss(Loss):
@@ -383,13 +359,14 @@ class BootstrappedSigmoidClassificationLoss(Loss):
   Reed et al. (ICLR 2015).
   """
 
-  def __init__(self, alpha, bootstrap_type='soft'):
+  def __init__(self, alpha, bootstrap_type='soft', anchorwise_output=False):
     """Constructor.
 
     Args:
       alpha: a float32 scalar tensor between 0 and 1 representing interpolation
         weight
       bootstrap_type: set to either 'hard' or 'soft' (default)
+      anchorwise_output: Outputs loss per anchor. (default False)
 
     Raises:
       ValueError: if bootstrap_type is not either 'hard' or 'soft'
@@ -399,6 +376,7 @@ class BootstrappedSigmoidClassificationLoss(Loss):
                        '\'hard\' or \'soft.\'')
     self._alpha = alpha
     self._bootstrap_type = bootstrap_type
+    self._anchorwise_output = anchorwise_output
 
   def _compute_loss(self, prediction_tensor, target_tensor, weights):
     """Compute loss function.
@@ -411,8 +389,8 @@ class BootstrappedSigmoidClassificationLoss(Loss):
       weights: a float tensor of shape [batch_size, num_anchors]
 
     Returns:
-      loss: a float tensor of shape [batch_size, num_anchors, num_classes]
-        representing the value of the loss function.
+      loss: a (scalar) tensor representing the value of the loss function
+            or a float tensor of shape [batch_size, num_anchors]
     """
     if self._bootstrap_type == 'soft':
       bootstrap_target_tensor = self._alpha * target_tensor + (
@@ -423,7 +401,9 @@ class BootstrappedSigmoidClassificationLoss(Loss):
               tf.sigmoid(prediction_tensor) > 0.5, tf.float32)
     per_entry_cross_ent = (tf.nn.sigmoid_cross_entropy_with_logits(
         labels=bootstrap_target_tensor, logits=prediction_tensor))
-    return per_entry_cross_ent * tf.expand_dims(weights, 2)
+    if self._anchorwise_output:
+      return tf.reduce_sum(per_entry_cross_ent * tf.expand_dims(weights, 2), 2)
+    return tf.reduce_sum(per_entry_cross_ent * tf.expand_dims(weights, 2))
 
 
 class HardExampleMiner(object):

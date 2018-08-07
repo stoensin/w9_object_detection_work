@@ -226,12 +226,11 @@ def preprocess_for_train(image, height, width, bbox,
     # Randomly flip the image horizontally.
     distorted_image = tf.image.random_flip_left_right(distorted_image)
 
-    # Randomly distort the colors. There are 1 or 4 ways to do it.
-    num_distort_cases = 1 if fast_mode else 4
+    # Randomly distort the colors. There are 4 ways to do it.
     distorted_image = apply_with_random_selector(
         distorted_image,
         lambda x, ordering: distort_color(x, ordering, fast_mode),
-        num_cases=num_distort_cases)
+        num_cases=4)
 
     if add_image_summaries:
       tf.summary.image('final_distorted_image',

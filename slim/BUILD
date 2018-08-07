@@ -201,11 +201,10 @@ py_library(
         ":cyclegan",
         ":inception",
         ":lenet",
-        ":mobilenet",
+        ":mobilenet_v1",
         ":nasnet",
         ":overfeat",
         ":pix2pix",
-        ":pnasnet",
         ":resnet_v1",
         ":resnet_v2",
         ":vgg",
@@ -217,7 +216,7 @@ py_library(
     srcs = ["nets/alexnet.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -297,7 +296,7 @@ py_library(
     srcs = ["nets/inception_utils.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -346,7 +345,7 @@ py_library(
     srcs = ["nets/inception_resnet_v2.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -426,34 +425,7 @@ py_library(
     srcs = ["nets/mobilenet_v1.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
-    ],
-)
-
-py_library(
-    name = "mobilenet_v2",
-    srcs = glob(["nets/mobilenet/*.py"]),
-    srcs_version = "PY2AND3",
-    deps = [
-        # "//tensorflow",
-    ],
-)
-
-py_test(
-    name = "mobilenet_v2_test",
-    srcs = ["nets/mobilenet/mobilenet_v2_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":mobilenet",
-        # "//tensorflow",
-    ],
-)
-
-py_library(
-    name = "mobilenet",
-    deps = [
-        ":mobilenet_v1",
-        ":mobilenet_v2",
+        # "//tensorflow"
     ],
 )
 
@@ -466,28 +438,6 @@ py_test(
     deps = [
         ":mobilenet_v1",
         # "//numpy",
-        # "//tensorflow",
-    ],
-)
-
-py_binary(
-    name = "mobilenet_v1_train",
-    srcs = ["nets/mobilenet_v1_train.py"],
-    deps = [
-        ":dataset_factory",
-        ":mobilenet_v1",
-        ":preprocessing_factory",
-        # "//tensorflow",
-    ],
-)
-
-py_binary(
-    name = "mobilenet_v1_eval",
-    srcs = ["nets/mobilenet_v1_eval.py"],
-    deps = [
-        ":dataset_factory",
-        ":mobilenet_v1",
-        ":preprocessing_factory",
         # "//tensorflow",
     ],
 )
@@ -535,34 +485,11 @@ py_test(
 )
 
 py_library(
-    name = "pnasnet",
-    srcs = ["nets/nasnet/pnasnet.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":nasnet",
-        ":nasnet_utils",
-        # "//tensorflow",
-    ],
-)
-
-py_test(
-    name = "pnasnet_test",
-    size = "large",
-    srcs = ["nets/nasnet/pnasnet_test.py"],
-    shard_count = 4,
-    srcs_version = "PY2AND3",
-    deps = [
-        ":pnasnet",
-        # "//tensorflow",
-    ],
-)
-
-py_library(
     name = "overfeat",
     srcs = ["nets/overfeat.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -582,7 +509,7 @@ py_library(
     srcs = ["nets/pix2pix.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -601,7 +528,7 @@ py_library(
     srcs = ["nets/resnet_utils.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -658,7 +585,7 @@ py_library(
     srcs = ["nets/vgg.py"],
     srcs_version = "PY2AND3",
     deps = [
-        # "//tensorflow",
+        # "//tensorflow"
     ],
 )
 
@@ -694,8 +621,8 @@ py_test(
     ],
 )
 
-py_library(
-    name = "train_image_classifier_lib",
+py_binary(
+    name = "train_image_classifier",
     srcs = ["train_image_classifier.py"],
     deps = [
         ":dataset_factory",
@@ -703,15 +630,6 @@ py_library(
         ":nets_factory",
         ":preprocessing_factory",
         # "//tensorflow",
-    ],
-)
-
-py_binary(
-    name = "train_image_classifier",
-    srcs = ["train_image_classifier.py"],
-    paropts = ["--compress"],
-    deps = [
-        ":train_image_classifier_lib",
     ],
 )
 
@@ -729,7 +647,6 @@ py_binary(
 py_binary(
     name = "export_inference_graph",
     srcs = ["export_inference_graph.py"],
-    paropts = ["--compress"],
     deps = [
         ":dataset_factory",
         ":nets_factory",
